@@ -1,4 +1,5 @@
-import type { Message, ModelResponse, ModelTool } from "../../shared/types.js";
+import type { Message, ModelResponse } from "../../shared/types.js";
+import type { Tool } from "../../tools/tools.js";
 import type { Model } from "./model.js";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -21,7 +22,7 @@ export class OpenAi implements Model {
         return this.model;
     }
 
-    async sendMessage(msgs: Message[], tools: ModelTool[]): Promise<ModelResponse> {
+    async sendMessage(msgs: Message[], tools: Tool[]): Promise<ModelResponse> {
         const response = await fetch(OPENAI_API_URL, {
             method: "POST",
             headers: {
@@ -100,13 +101,13 @@ function formatMessage(message: Message) {
     };
 }
 
-function formatTool(tool: ModelTool) {
+function formatTool(tool: Tool) {
     return {
         type: "function",
         function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.inputSchema,
+            name: tool.name(),
+            description: tool.description(),
+            parameters: tool.inputSchema(),
         },
     };
 }

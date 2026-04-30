@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { Agent } from "./agent.js";
 import type { Model } from "./models/model.js";
-import type { Message, ModelResponse, ModelTool } from "../shared/types.js";
+import type { Message, ModelResponse } from "../shared/types.js";
 import type { Tool } from "../tools/tools.js";
 
 describe("Agent", () => {
@@ -41,16 +41,14 @@ describe("Agent", () => {
         expect(response).toBe("Stopped after 2 tool call iterations to avoid a possible infinite loop.");
         expect(toolExecutions).toBe(2);
         expect(model.calls).toBe(3);
-        expect(model.tools.at(0)?.at(0)).toEqual({
-            name: "test_tool",
-            description: "Test tool",
-            inputSchema: {
-                type: "object",
-                properties: {
-                    value: { type: "string" },
-                },
-                required: ["value"],
+        expect(model.tools.at(0)?.at(0)?.name()).toBe("test_tool");
+        expect(model.tools.at(0)?.at(0)?.description()).toBe("Test tool");
+        expect(model.tools.at(0)?.at(0)?.inputSchema()).toEqual({
+            type: "object",
+            properties: {
+                value: { type: "string" },
             },
+            required: ["value"],
         });
         expect(emittedMessages.at(-1)?.at(-1)).toEqual({
             role: "assistant",
@@ -61,7 +59,7 @@ describe("Agent", () => {
 
 class RepeatingToolCallModel implements Model {
     calls = 0;
-    tools: ModelTool[][] = [];
+    tools: Tool[][] = [];
 
     getProvider() {
         return "test";
@@ -71,7 +69,7 @@ class RepeatingToolCallModel implements Model {
         return "repeating-tool-call";
     }
 
-    async sendMessage(_: Message[], tools: ModelTool[]): Promise<ModelResponse> {
+    async sendMessage(_: Message[], tools: Tool[]): Promise<ModelResponse> {
         this.calls++;
         this.tools.push(tools);
         return {

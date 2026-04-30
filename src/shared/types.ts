@@ -1,16 +1,42 @@
 export type ToolCall = {
+    // Opaque provider-generated tool call identifier that must be echoed back with the tool result.
     id: string;
     name: string;
     input: unknown;
 };
 
-export type JsonSchema = Record<string, unknown>;
-
-export type ModelTool = {
-    name: string;
-    description: string;
-    inputSchema: JsonSchema;
+type JsonSchemaString = {
+    type: "string";
+    description?: string;
+    enum?: string[];
 };
+
+type JsonSchemaNumber = {
+    type: "number";
+    description?: string;
+};
+
+type JsonSchemaArray = {
+    type: "array";
+    description?: string;
+    items: JsonSchemaProperty;
+};
+
+type JsonSchemaObject = {
+    type: "object";
+    description?: string;
+    additionalProperties?: boolean;
+    properties: Record<string, JsonSchemaProperty>;
+    required?: string[];
+};
+
+export type JsonSchemaProperty =
+    | JsonSchemaString
+    | JsonSchemaNumber
+    | JsonSchemaArray
+    | JsonSchemaObject;
+
+export type JsonSchema = JsonSchemaObject;
 
 export type ModelResponse = {
     text: string;

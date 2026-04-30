@@ -1,8 +1,9 @@
-import type { Message, ModelResponse, ModelTool } from "../../shared/types.js";
+import type { Message, ModelResponse } from "../../shared/types.js";
+import type { Tool } from "../../tools/tools.js";
 
 export interface Model {
 
     getProvider(): string;
     getModel(): string;
-    sendMessage(msgs: Message[], tools: ModelTool[]): Promise<ModelResponse>;
+    sendMessage(msgs: Message[], tools: Tool[]): Promise<ModelResponse>;
 }

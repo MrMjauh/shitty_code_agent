@@ -1,7 +1,7 @@
 import type { Tool } from "../tools/tools.js";
 import type { Model } from "./models/model.js";
 import { type CompileSystemInstructions, SystemInstructions } from "./prompt.js";
-import type { Message, ModelTool } from "../shared/types.js";
+import type { Message } from "../shared/types.js";
 
 const DEFAULT_MAX_TOOL_ITERATIONS = 10;
 
@@ -60,7 +60,7 @@ export class Agent {
         ];
         this.emitMessages(messages);
 
-        let response = await this.model.sendMessage(messages, this.modelTools());
+        let response = await this.model.sendMessage(messages, this.tools);
 
         let toolIterations = 0;
 
@@ -95,7 +95,7 @@ export class Agent {
                 this.emitMessages(messages);
             }
 
-            response = await this.model.sendMessage(messages, this.modelTools());
+            response = await this.model.sendMessage(messages, this.tools);
         }
 
         messages.push({ role: "assistant", text: response.text });
@@ -117,14 +117,6 @@ export class Agent {
                 error: error instanceof Error ? error.message : String(error),
             };
         }
-    }
-
-    private modelTools(): ModelTool[] {
-        return this.tools.map((tool) => ({
-            name: tool.name(),
-            description: tool.description(),
-            inputSchema: tool.inputSchema(),
-        }));
     }
 }
 
