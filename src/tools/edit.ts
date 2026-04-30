@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { Tool } from "./tools.js";
 import { parseToolInput, toolErrorOutput, type ToolErrorOutput, z } from "./validation.js";
-import { resolveWorkspacePath } from "./workspace.js";
+import { resolveWorkspacePath } from "../security/workspace.js";
 
 interface EditFileOutput {
   bytesWritten: number;

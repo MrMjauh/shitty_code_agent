@@ -1,14 +1,21 @@
 import { isAbsolute, relative, resolve } from "node:path";
 
-export function resolveWorkspacePath(inputPath = "/") {
+export function resolveWorkspacePath(inputPath: string): string {
+  if (!inputPath || typeof inputPath !== "string") {
+    throw new Error("inputPath must be a non-empty string");
+  }
+
   const root = process.cwd();
-  const normalizedPath = inputPath === "/" ? "." : inputPath;
-  const resolved = resolve(root, normalizedPath);
+  const resolved = resolve(root, inputPath);
   const relativePath = relative(root, resolved);
 
   if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
     throw new Error("path must stay inside the current working directory");
   }
+
+  // Optional: guard against symlink escapes
+  // const real = realpathSync(resolved);
+  // if (relative(root, real).startsWith("..")) { ... }
 
   return resolved;
 }

@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import type { Tool } from "./tools.js";
 import { parseToolInput, toolErrorOutput, type ToolErrorOutput, z } from "./validation.js";
-import { displayWorkspacePath, resolveWorkspacePath } from "./workspace.js";
+import { displayWorkspacePath, resolveWorkspacePath } from "../security/workspace.js";
 
 type EntryType = "file" | "directory";
 

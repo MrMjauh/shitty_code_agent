@@ -2,7 +2,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Tool } from "./tools.js";
 import { parseToolInput, toolErrorOutput, type ToolErrorOutput, z } from "./validation.js";
-import { resolveWorkspacePath } from "./workspace.js";
+import { resolveWorkspacePath } from "../security/workspace.js";
 
 interface WriteFileOutput {
   bytesWritten: number;
