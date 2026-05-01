@@ -5,6 +5,7 @@ export interface Provider {
 
     getProvider(): string;
     getModel(): string;
-    sendMessage(msgs: Message[], tools: Tool[]): Promise<ModelResponse>;
+    generateContent(history: Message[], tools: Tool[]): Promise<ModelResponse>;
+    sendMessage(msg: Message, history: Message[], tools: Tool[]): Promise<ModelResponse>;
 
 }

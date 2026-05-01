@@ -30,7 +30,15 @@ export class OpenAiCompatibleProvider implements Provider {
         return this.model;
     }
 
-    async sendMessage(msgs: Message[], tools: Tool[]): Promise<ModelResponse> {
+    async sendMessage(msg: Message, history: Message[], tools: Tool[]): Promise<ModelResponse> {
+        return this.createCompletion([...history, msg], tools);
+    }
+
+    async generateContent(history: Message[], tools: Tool[]): Promise<ModelResponse> {
+        return this.createCompletion(history, tools);
+    }
+
+    private async createCompletion(messages: Message[], tools: Tool[]): Promise<ModelResponse> {
         const response = await fetch(this.apiUrl, {
             method: "POST",
             headers: {
@@ -39,7 +47,7 @@ export class OpenAiCompatibleProvider implements Provider {
             },
             body: JSON.stringify({
                 model: this.model,
-                messages: msgs.map(formatMessage),
+                messages: messages.map(formatMessage),
                 ...(tools.length > 0 ? { tools: tools.map(formatTool) } : {}),
             }),
         });

@@ -39,7 +39,7 @@ function Chat(props: { agent: Agent }) {
     const maxScrollOffset = Math.max(0, rows.length - transcriptHeight);
 
     useEffect(() => {
-        props.agent.onNewMessage(setMessages);
+        props.agent.onNewMessage((_, allMessages) => setMessages(allMessages));
     }, [props.agent]);
 
     useEffect(() => {
@@ -110,6 +110,7 @@ function Chat(props: { agent: Agent }) {
         switch (command) {
             case "/clear":
                 props.agent.clearHistory();
+                setMessages([]);
                 stickToBottomRef.current = true;
                 return true;
             case "/help":

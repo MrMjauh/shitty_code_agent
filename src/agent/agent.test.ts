@@ -34,7 +34,7 @@ describe("Agent", () => {
             maxToolIterations: 2,
         });
 
-        agent.onNewMessage((messages) => emittedMessages.push(messages));
+        agent.onNewMessage((_, messages) => emittedMessages.push([...messages]));
 
         const response = await agent.sendMessage("loop forever");
 
@@ -69,7 +69,15 @@ class RepeatingToolCallModel implements Provider {
         return "repeating-tool-call";
     }
 
-    async sendMessage(_: Message[], tools: Tool[]): Promise<ModelResponse> {
+    async sendMessage(_: Message, __: Message[], tools: Tool[]): Promise<ModelResponse> {
+        return this.nextResponse(tools);
+    }
+
+    async generateContent(_: Message[], tools: Tool[]): Promise<ModelResponse> {
+        return this.nextResponse(tools);
+    }
+
+    private nextResponse(tools: Tool[]): ModelResponse {
         this.calls++;
         this.tools.push(tools);
         return {
