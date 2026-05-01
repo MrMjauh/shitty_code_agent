@@ -13,6 +13,19 @@ md.use(
 
 export function renderMarkdown(text: string): string {
     const out = md.parse(text);
-    if (typeof out !== "string") return text;
-    return out.replace(/\n+$/, "");
+    const rendered = typeof out === "string" ? out.replace(/\n+$/, "") : "";
+
+    if (rendered !== text && /\x1b\[/.test(rendered)) {
+        return rendered;
+    }
+
+    return renderBasicMarkdown(text);
+}
+
+function renderBasicMarkdown(text: string): string {
+    return text
+        .replace(/^#{1,6}\s+(.+)$/gm, "\x1b[1m$1\x1b[22m")
+        .replace(/^\s*[*-]\s+(.+)$/gm, "  - $1")
+        .replace(/\*\*(.+?)\*\*/g, "\x1b[1m$1\x1b[22m")
+        .replace(/\n+$/, "");
 }

@@ -6,7 +6,7 @@ export function resolveWorkspacePath(inputPath: string): string {
   }
 
   const root = process.cwd();
-  const resolved = resolve(root, inputPath);
+  const resolved = resolve(root, inputPath === "/" ? "." : inputPath);
   const relativePath = relative(root, resolved);
 
   if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
@@ -22,5 +22,5 @@ export function resolveWorkspacePath(inputPath: string): string {
 
 export function displayWorkspacePath(path: string, root = process.cwd()) {
   const relativePath = relative(root, path);
-  return relativePath.length === 0 ? "." : relativePath;
+  return relativePath.length === 0 ? "." : relativePath.replaceAll("\\", "/");
 }

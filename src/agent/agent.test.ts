@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { Agent } from "./agent.js";
-import type { Model } from "./models/model.js";
+import type { Provider } from "./models/provider.js";
 import type { Message, ModelResponse } from "../shared/types.js";
 import type { Tool } from "../tools/tools.js";
 
@@ -10,10 +10,10 @@ describe("Agent", () => {
         let toolExecutions = 0;
         const emittedMessages: Message[][] = [];
 
-        const agent = new Agent(
-            model,
-            () => "system",
-            [
+        const agent = new Agent({
+            provider: model,
+            compileInstructions: () => "system",
+            tools: [
                 {
                     name: () => "test_tool",
                     description: () => "Test tool",
@@ -31,8 +31,8 @@ describe("Agent", () => {
                     },
                 } satisfies Tool,
             ],
-            { maxToolIterations: 2 },
-        );
+            maxToolIterations: 2,
+        });
 
         agent.onNewMessage((messages) => emittedMessages.push(messages));
 
@@ -57,7 +57,7 @@ describe("Agent", () => {
     });
 });
 
-class RepeatingToolCallModel implements Model {
+class RepeatingToolCallModel implements Provider {
     calls = 0;
     tools: Tool[][] = [];
 

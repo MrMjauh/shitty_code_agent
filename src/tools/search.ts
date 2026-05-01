@@ -3,6 +3,7 @@ import { basename, extname, join } from "node:path";
 import type { Tool } from "./tools.js";
 import { parseToolInput, toolErrorOutput, type ToolErrorOutput, z } from "./validation.js";
 import { displayWorkspacePath, resolveWorkspacePath } from "../security/workspace.js";
+import type { JsonSchema } from "../shared/types.js";
 
 type EntryType = "file" | "directory";
 
@@ -120,7 +121,7 @@ export class SearchTool implements Tool {
             + "Use action=grep with query to search inside text-based files.";
     }
 
-    inputSchema() {
+    inputSchema(): JsonSchema {
         return {
             type: "object",
             additionalProperties: false,
@@ -253,7 +254,7 @@ export class SearchTool implements Tool {
 
 async function listDirectory(input: Extract<SearchInput, { action: "list" }>): Promise<SearchOutput> {
     const root = process.cwd();
-    const dir = resolveWorkspacePath(input.path);
+    const dir = resolveWorkspacePath(input.path ?? ".");
     const entries = await readdir(dir, { withFileTypes: true });
     const excludes = input.excludes ?? [];
     const limit = normalizePositiveInteger(input.limit, DEFAULT_LIMIT);
@@ -274,7 +275,7 @@ async function searchByPrefix(input: Extract<SearchInput, { action: "search" }>)
     if (!input.prefix) throw new Error("prefix is required for action=search");
 
     const root = process.cwd();
-    const start = resolveWorkspacePath(input.path);
+    const start = resolveWorkspacePath(input.path ?? ".");
     const limit = normalizePositiveInteger(input.limit, DEFAULT_LIMIT);
     const depth = normalizePositiveInteger(input.depth, DEFAULT_DEPTH);
     const entries: SearchEntry[] = [];
@@ -298,7 +299,7 @@ async function grepFiles(input: Extract<SearchInput, { action: "grep" }>): Promi
     if (!input.query) throw new Error("query is required for action=grep");
 
     const root = process.cwd();
-    const start = resolveWorkspacePath(input.path);
+    const start = resolveWorkspacePath(input.path ?? ".");
     const limit = normalizePositiveInteger(input.limit, DEFAULT_LIMIT);
     const depth = normalizePositiveInteger(input.depth, DEFAULT_DEPTH);
     const needle = input.query;

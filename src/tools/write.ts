@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import type { Tool } from "./tools.js";
 import { parseToolInput, toolErrorOutput, type ToolErrorOutput, z } from "./validation.js";
 import { resolveWorkspacePath } from "../security/workspace.js";
+import type { JsonSchema } from "../shared/types.js";
 
 interface WriteFileOutput {
   bytesWritten: number;
@@ -23,7 +24,7 @@ export class WriteFileTool implements Tool {
       + "Prefer edit_file for changing existing files.";
   }
 
-  inputSchema() {
+  inputSchema(): JsonSchema {
     return {
       type: "object",
       additionalProperties: false,

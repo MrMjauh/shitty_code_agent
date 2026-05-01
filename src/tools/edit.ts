@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import type { Tool } from "./tools.js";
 import { parseToolInput, toolErrorOutput, type ToolErrorOutput, z } from "./validation.js";
 import { resolveWorkspacePath } from "../security/workspace.js";
+import type { JsonSchema } from "../shared/types.js";
 
 interface EditFileOutput {
   bytesWritten: number;
@@ -24,7 +25,7 @@ export class EditFileTool implements Tool {
       + "The edit fails if old_text is empty, missing, or appears more than once.";
   }
 
-  inputSchema() {
+  inputSchema(): JsonSchema {
     return {
       type: "object",
       additionalProperties: false,

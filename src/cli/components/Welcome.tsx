@@ -11,7 +11,7 @@ export function Welcome({ agent }: { agent: Agent }) {
                 <Text color="gray">  a small coding agent for your terminal</Text>
             </Box>
             <Box flexDirection="column" marginTop={1} paddingX={2}>
-                <InfoLine label="model" value={`${agent.getProvider()} / ${agent.getModel()}`} />
+                <InfoLine label="model" value={`${agent.getProvider().getProvider()} / ${agent.getProvider().getModel()}`} />
                 <InfoLine label="cwd" value={process.cwd()} />
                 <InfoLine label="tools" value="read · edit · write · search" />
             </Box>

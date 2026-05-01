@@ -1,8 +1,8 @@
 import type { Tool } from "../tools/tools.js";
 
-export type CompileSystemInstructions = (tools: Tool[]) => string;
+export type AgentInstructions = (tools: Tool[]) => string;
 
-export const SystemInstructions: CompileSystemInstructions = (tools) => {
+export const DEFAULT_AGENT_INSTRUCTIONS: AgentInstructions = (tools) => {
     const base = formatBaseInstructions();
 
     if (tools.length === 0) return base;

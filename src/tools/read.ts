@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { Tool } from "./tools.js";
 import { parseToolInput, toolErrorOutput, type ToolErrorOutput, z } from "./validation.js";
 import { resolveWorkspacePath } from "../security/workspace.js";
+import type { JsonSchema } from "../shared/types.js";
 
 interface ReadFileOutput {
   content: string;
@@ -21,7 +22,7 @@ export class ReadFileTool implements Tool {
       + "Use this to inspect existing files before editing them.";
   }
 
-  inputSchema() {
+  inputSchema(): JsonSchema {
     return {
       type: "object",
       additionalProperties: false,

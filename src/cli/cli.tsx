@@ -3,8 +3,7 @@ import { render, Box, Text, useInput, useStdout } from "ink";
 import TextInput from "ink-text-input";
 import type { Message } from "../shared/types.js";
 import { Agent } from "../agent/agent.js";
-import { OpenAi } from "../agent/models/openai.js";
-import { SystemInstructions } from "../agent/prompt.js";
+import { DEFAULT_AGENT_INSTRUCTIONS } from "../agent/agent-instructions.js";
 import { WriteFileTool } from "../tools/write.js";
 import { ReadFileTool } from "../tools/read.js";
 import { SearchTool } from "../tools/search.js";
@@ -16,6 +15,9 @@ import { Transcript, renderBlocks } from "./components/Transcript.js";
 import { Spinner } from "./components/Spinner.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { SlashCommandDropdown } from "./components/SlashCommandDropdown.js";
+import { modelConfigurationSchema } from "../shared/env.js";
+import { CodeAgentError } from "../shared/error.js";
+import { createProviderFromConfig } from "../agent/models/index.js";
 
 function Chat(props: { agent: Agent }) {
     const [messages, setMessages] = useState<Message[]>([]);
@@ -187,12 +189,20 @@ function Chat(props: { agent: Agent }) {
 }
 
 export function startCli() {
-    const model = new OpenAi(process.env.OPENAI_API_KEY ?? "");
-    const agent = new Agent(model, SystemInstructions, [
-        new ReadFileTool(),
-        new EditFileTool(),
-        new WriteFileTool(),
-        new SearchTool(),
-    ]);
+    const modelConfiguration = modelConfigurationSchema.safeParse(process.env);
+    if (modelConfiguration.error) {
+        throw new CodeAgentError("Cannot start cli, missing envs", modelConfiguration.error);
+    }
+    const provider = createProviderFromConfig(modelConfiguration.data);
+    const agent = new Agent({
+        provider,
+        compileInstructions: DEFAULT_AGENT_INSTRUCTIONS,
+        tools: [
+            new ReadFileTool(),
+            new EditFileTool(),
+            new WriteFileTool(),
+            new SearchTool(),
+        ],
+    });
     render(<Chat agent={agent} />);
 }

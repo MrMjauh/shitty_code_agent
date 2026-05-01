@@ -1,10 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { SystemInstructions } from "./prompt.js";
+import { DEFAULT_AGENT_INSTRUCTIONS } from "./agent-instructions.js";
 import type { Tool } from "../tools/tools.js";
 
 describe("SystemInstructions", () => {
     test("renders the base prompt without tools", () => {
-        expect(SystemInstructions([])).toMatchInlineSnapshot(`
+        expect(DEFAULT_AGENT_INSTRUCTIONS([])).toMatchInlineSnapshot(`
           "You are a coding agent working in the user's current repository.
 
           Work carefully:
@@ -46,7 +46,7 @@ describe("SystemInstructions", () => {
             }),
         ];
 
-        expect(SystemInstructions(tools)).toMatchInlineSnapshot(`
+        expect(DEFAULT_AGENT_INSTRUCTIONS(tools)).toMatchInlineSnapshot(`
           "You are a coding agent working in the user's current repository.
 
           Work carefully:
@@ -112,7 +112,7 @@ function testTool({
     return {
         name: () => name,
         description: () => description,
-        inputSchema: () => ({ type: "object" }),
+        inputSchema: () => ({ type: "object", properties: {} }),
         example: () => examples,
         execute: async () => ({}),
     };

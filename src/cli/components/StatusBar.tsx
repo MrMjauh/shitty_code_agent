@@ -8,7 +8,7 @@ export function StatusBar({ agent, loading }: { agent: Agent; loading: boolean }
             <Box>
                 <Text color={loading ? "yellow" : "green"}>● </Text>
                 <Text color="gray">
-                    {agent.getProvider()} · {agent.getModel()}
+                    {agent.getProvider().getProvider()} · {agent.getProvider().getModel()}
                 </Text>
             </Box>
             <Text color="gray">{shortenPath(process.cwd())}  ↑↓ scroll · / commands</Text>

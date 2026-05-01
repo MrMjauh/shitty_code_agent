@@ -1,50 +1,38 @@
 import type { Tool } from "../tools/tools.js";
-import type { Model } from "./models/model.js";
-import { type CompileSystemInstructions, SystemInstructions } from "./prompt.js";
+import type { Provider } from "./models/provider.js";
+import { type AgentInstructions } from "./agent-instructions.js";
 import type { Message } from "../shared/types.js";
-
-const DEFAULT_MAX_TOOL_ITERATIONS = 10;
 
 export type OnNewMessage = (messages: Message[]) => void;
 export type AgentOptions = {
+    tools: Tool[];
+    provider: Provider;
+    compileInstructions: AgentInstructions;
     maxToolIterations?: number;
 };
 
 export class Agent {
 
-    private model: Model;
+    private options: Required<AgentOptions>;
     private history: Message[] = [];
-    private compileInstructions: CompileSystemInstructions = SystemInstructions;
-    private tools: Tool[] = [];
-    private maxToolIterations = DEFAULT_MAX_TOOL_ITERATIONS;
     private onNewMessageCallback: OnNewMessage = () => {};
 
-    constructor(
-        model: Model,
-        compileInstructions: CompileSystemInstructions,
-        tools: Tool[],
-        options: AgentOptions = {},
-    ) {
-        this.model = model;
-        this.compileInstructions = compileInstructions;
-        this.tools = tools;
-        this.maxToolIterations = normalizeMaxToolIterations(options.maxToolIterations);
+    constructor(options: AgentOptions) {
+        this.options = Object.assign({
+            maxToolIterations: 10
+        }, options);
     }
 
     public onNewMessage(callback: OnNewMessage) {
         this.onNewMessageCallback = callback;
     }
 
-    public getProvider() {
-        return this.model.getProvider();
-    }
-
-    public getModel() {
-        return this.model.getModel();
+    public getProvider(): Provider {
+        return this.options.provider;
     }
 
     public getSystemInstructions() {
-        return this.compileInstructions(this.tools);
+        return this.options.compileInstructions(this.options.tools);
     }
 
     public clearHistory() {
@@ -53,23 +41,24 @@ export class Agent {
     }
 
     public async sendMessage(msg: string): Promise<string> {
+        const { compileInstructions, provider, tools, maxToolIterations } = this.options;
         const messages: Message[] = [
-            { role: "system", text: this.compileInstructions(this.tools) },
+            { role: "system", text: compileInstructions(tools) },
             ...this.history,
             { role: "user", text: msg },
         ];
         this.emitMessages(messages);
 
-        let response = await this.model.sendMessage(messages, this.tools);
+        let response = await provider.sendMessage(messages, tools);
 
         let toolIterations = 0;
 
         while (true) {
             if (response.toolCalls.length === 0) break;
 
-            if (toolIterations + response.toolCalls.length > this.maxToolIterations) {
+            if (toolIterations + response.toolCalls.length > maxToolIterations) {
                 response = {
-                    text: `Stopped after ${this.maxToolIterations} tool call iterations to avoid a possible infinite loop.`,
+                    text: `Stopped after ${maxToolIterations} tool call iterations to avoid a possible infinite loop.`,
                     toolCalls: [],
                 };
                 break;
@@ -80,7 +69,7 @@ export class Agent {
 
             for (const toolCall of response.toolCalls) {
                 toolIterations++;
-                const tool = this.tools.find((t) => t.name() === toolCall.name);
+                const tool = tools.find((t) => t.name() === toolCall.name);
 
                 const toolResult = tool
                     ? await this.executeTool(tool, toolCall.input)
@@ -95,7 +84,7 @@ export class Agent {
                 this.emitMessages(messages);
             }
 
-            response = await this.model.sendMessage(messages, this.tools);
+            response = await provider.sendMessage(messages, tools);
         }
 
         messages.push({ role: "assistant", text: response.text });
@@ -118,10 +107,4 @@ export class Agent {
             };
         }
     }
-}
-
-function normalizeMaxToolIterations(value: number | undefined) {
-    if (value === undefined) return DEFAULT_MAX_TOOL_ITERATIONS;
-    if (!Number.isFinite(value) || value < 1) return DEFAULT_MAX_TOOL_ITERATIONS;
-    return Math.floor(value);
 }
