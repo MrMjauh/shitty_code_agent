@@ -29,6 +29,7 @@
     "marked": "^15.0.6",
     "marked-terminal": "^7.3.0",
     "react": "^19.2.5",
+    "winston": "^3.19.0",
     "zod": "^4.3.6"
   }
 }

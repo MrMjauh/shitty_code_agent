@@ -61,6 +61,7 @@ export class OpenAiCompatibleProvider implements Provider {
             choices: {
                 message: {
                     content: string | null;
+                    reasoning_content?: string;
                     tool_calls?: {
                         id: string;
                         type: "function";
@@ -78,6 +79,7 @@ export class OpenAiCompatibleProvider implements Provider {
 
         return {
             text: message.content ?? "",
+            ...(message.reasoning_content ? { reasoningContent: message.reasoning_content } : {}),
             toolCalls: (message.tool_calls ?? []).map((toolCall) => ({
                 id: toolCall.id,
                 name: toolCall.function.name,
@@ -88,6 +90,10 @@ export class OpenAiCompatibleProvider implements Provider {
 }
 
 function formatMessage(message: Message) {
+    const reasoningContent = message.reasoningContent
+        ? { reasoning_content: message.reasoningContent }
+        : {};
+
     if (message.role === "tool") {
         return {
             role: "tool",
@@ -100,6 +106,7 @@ function formatMessage(message: Message) {
         return {
             role: "assistant",
             content: message.text || null,
+            ...reasoningContent,
             tool_calls: message.toolCalls.map((toolCall) => ({
                 id: toolCall.id,
                 type: "function",
@@ -114,6 +121,7 @@ function formatMessage(message: Message) {
     return {
         role: message.role,
         content: message.text,
+        ...reasoningContent,
     };
 }
 

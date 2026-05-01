@@ -4,7 +4,7 @@ import type { Tool } from "../tools/tools.js";
 
 describe("SystemInstructions", () => {
     test("renders the base prompt without tools", () => {
-        expect(DEFAULT_AGENT_INSTRUCTIONS([])).toMatchInlineSnapshot(`
+        expect(DEFAULT_AGENT_INSTRUCTIONS({ tools: [], maxToolIterations: 50 })).toMatchInlineSnapshot(`
           "You are a coding agent working in the user's current repository.
 
           Work carefully:
@@ -12,6 +12,7 @@ describe("SystemInstructions", () => {
           - Prefer small, scoped changes that match existing code style.
           - Do not overwrite unrelated user changes.
           - Paths are relative to the current working directory.
+          - You can make at most 50 tool calls in a single user turn. Plan tool use accordingly.
 
           Final response:
           - Be concise.
@@ -46,7 +47,7 @@ describe("SystemInstructions", () => {
             }),
         ];
 
-        expect(DEFAULT_AGENT_INSTRUCTIONS(tools)).toMatchInlineSnapshot(`
+        expect(DEFAULT_AGENT_INSTRUCTIONS({ tools, maxToolIterations: 12 })).toMatchInlineSnapshot(`
           "You are a coding agent working in the user's current repository.
 
           Work carefully:
@@ -54,6 +55,7 @@ describe("SystemInstructions", () => {
           - Prefer small, scoped changes that match existing code style.
           - Do not overwrite unrelated user changes.
           - Paths are relative to the current working directory.
+          - You can make at most 12 tool calls in a single user turn. Plan tool use accordingly.
 
           Final response:
           - Be concise.

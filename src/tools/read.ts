@@ -8,8 +8,12 @@ interface ReadFileOutput {
   content: string;
 }
 
+interface ReadFilesOutput {
+  contents: { path: string; content: string }[];
+}
+
 const readFileInputSchema = z.object({
-  path: z.string(),
+  path: z.union([z.string(), z.array(z.string())]),
 });
 
 export class ReadFileTool implements Tool {
@@ -19,7 +23,8 @@ export class ReadFileTool implements Tool {
 
   description() {
     return "Read the contents of a file at the given path. "
-      + "Use this to inspect existing files before editing them.";
+      + "Use this to inspect existing files before editing them. "
+      + "Pass an array of paths to read multiple files at once (PERFERRED).";
   }
 
   inputSchema(): JsonSchema {
@@ -28,8 +33,11 @@ export class ReadFileTool implements Tool {
       additionalProperties: false,
       properties: {
         path: {
-          type: "string",
-          description: "Path to read, relative to the current working directory.",
+          oneOf: [
+            { type: "string", description: "Path to read, relative to the current working directory." },
+            { type: "array", items: { type: "string" }, description: "Paths to read, relative to the current working directory." },
+          ],
+          description: "Path (or array of paths) to read, relative to the current working directory.",
         },
       },
       required: ["path"],
@@ -43,14 +51,35 @@ export class ReadFileTool implements Tool {
         input: { path: "src/index.ts" },
         output: { content: 'console.log("hello");\n' },
       },
+      {
+        description: "Read multiple source files",
+        input: { path: ["src/index.ts", "src/hello.ts"] },
+        output: {
+          contents: [
+            { path: "src/index.ts", content: 'console.log("hello");\n' },
+            { path: "src/hello.ts", content: 'console.log("world");\n' },
+          ],
+        },
+      },
     ];
   }
 
-  async execute(input: unknown): Promise<ReadFileOutput | ToolErrorOutput> {
+  async execute(input: unknown): Promise<ReadFileOutput | ReadFilesOutput | ToolErrorOutput> {
     try {
       const { path } = parseToolInput(readFileInputSchema, input);
-      const content = await readFile(resolveWorkspacePath(path), "utf-8");
-      return { content };
+
+      if (typeof path === "string") {
+        const content = await readFile(resolveWorkspacePath(path), "utf-8");
+        return { content };
+      }
+
+      const contents = await Promise.all(
+        path.map(async (p) => ({
+          path: p,
+          content: await readFile(resolveWorkspacePath(p), "utf-8"),
+        }))
+      );
+      return { contents };
     } catch (error) {
       return toolErrorOutput(error);
     }

@@ -13,6 +13,10 @@ export function buildBlocks(messages: Message[], loading: boolean): Block[] {
             blocks.push({ kind: "tool_result", ...summarizeToolResult(message.text) });
             continue;
         }
+        if (message.role === "error") {
+            blocks.push({ kind: "error", text: message.text });
+            continue;
+        }
         if (message.role === "assistant") {
             if (message.text.trim().length > 0) {
                 blocks.push({ kind: "assistant", text: message.text });

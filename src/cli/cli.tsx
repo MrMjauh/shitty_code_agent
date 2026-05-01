@@ -39,7 +39,7 @@ function Chat(props: { agent: Agent }) {
     const maxScrollOffset = Math.max(0, rows.length - transcriptHeight);
 
     useEffect(() => {
-        props.agent.onNewMessage((_, allMessages) => setMessages(allMessages));
+        props.agent.onNewMessage((msg, history) => setMessages([msg, ...history]));
     }, [props.agent]);
 
     useEffect(() => {

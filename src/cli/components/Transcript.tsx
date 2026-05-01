@@ -65,6 +65,16 @@ export function renderBlocks(blocks: Block[]): React.ReactNode[] {
                 });
                 break;
             }
+            case "error":
+                block.text.split("\n").forEach((line, i) => {
+                    rows.push(
+                        <Box>
+                            <Text color="red" bold>{i === 0 ? "! " : "  "}</Text>
+                            <Text color="red">{line}</Text>
+                        </Box>,
+                    );
+                });
+                break;
             case "tool_call":
                 rows.push(
                     <Box>
