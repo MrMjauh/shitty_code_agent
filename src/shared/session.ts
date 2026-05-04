@@ -41,4 +41,18 @@ export class Session {
   public onMessageCommitted(callback: OnMessagesCommitted) {
     this.onMessageCommittedCallback = callback;
   }
+
+  /** Serialize session messages to a JSON string. */
+  public serialize(): string {
+    return JSON.stringify(this.messages, null, 2);
+  }
+
+  /** Replace session messages from a JSON string (preserves callbacks). */
+  public deserialize(json: string): void {
+    const parsed: SessionMessage[] = JSON.parse(json);
+    if (!Array.isArray(parsed)) {
+      throw new Error("Invalid session format: expected an array of messages");
+    }
+    this.messages = parsed;
+  }
 }

@@ -17,5 +17,10 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     { name: "/help", description: "Show available slash commands" },
     { name: "/pwd", description: "Show the current working directory" },
     { name: "/system", description: "Show the current system instructions" },
+    { name: "/session save", description: "Save the current session (e.g., /session save my-chat)" },
+    { name: "/session load", description: "Load a saved session (e.g., /session load my-chat)" },
+    { name: "/session list", description: "List all saved sessions" },
+    { name: "/session delete", description: "Delete a saved session (e.g., /session delete my-chat)" },
+    { name: "/session reset", description: "Clear the current session and auto-save file" },
     { name: "/exit", description: "Exit the agent" },
 ];

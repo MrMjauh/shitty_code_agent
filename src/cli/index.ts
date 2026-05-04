@@ -1,3 +1,3 @@
 import { startCli } from "./cli.js";
 
-startCli();
+await startCli();
