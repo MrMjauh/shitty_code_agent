@@ -100,7 +100,9 @@ export class Agent {
         const toolMessage: Message = {
           role: "tool",
           status: toolResult.success ? "success" : "error",
-          text: toolResult.success ? JSON.stringify(toolResult.result) : toolResult.error,
+          text: toolResult.success
+            ? JSON.stringify(toolResult.result)
+            : toolResult.error,
           toolCallId: toolCall.id,
           toolName: toolCall.name,
         };
@@ -116,7 +118,7 @@ export class Agent {
         );
         context.push(createAssistantMessage(response));
       } catch (error) {
-        throw error
+        throw error;
       }
     }
 
@@ -140,13 +142,16 @@ export class Agent {
     };
   }
 
-  private async executeTool(tool: Tool, toolCall: ToolCall): Promise<Result<unknown, string>> {
+  private async executeTool(
+    tool: Tool,
+    toolCall: ToolCall,
+  ): Promise<Result<unknown, string>> {
     try {
       const result = await tool.execute(toolCall.input);
       return {
         success: true,
         result,
-      } 
+      };
     } catch (error) {
       return {
         success: false,
@@ -165,29 +170,41 @@ export class Agent {
     let response: ModelResponse | undefined;
     let streamedText = "";
     let streamedReasoningContent = "";
-    const assistantSessionMessage = this.session.commitMessage(createStreamingAssistantMessage({
-      text: streamedText,
-      reasoningContent: streamedReasoningContent,
-    }));
+    const assistantSessionMessage = this.session.commitMessage(
+      createStreamingAssistantMessage({
+        text: streamedText,
+        reasoningContent: streamedReasoningContent,
+      }),
+    );
 
-    for await (const event of provider.generateContent(systemMessage, context, tools)) {
+    for await (const event of provider.generateContent(
+      systemMessage,
+      context,
+      tools,
+    )) {
       if (event.type === "reasoning_delta") {
         streamedReasoningContent += event.text;
-        assistantSessionMessage.update(createStreamingAssistantMessage({
-          text: streamedText,
-          reasoningContent: streamedReasoningContent,
-        }));
+        assistantSessionMessage.update(
+          createStreamingAssistantMessage({
+            text: streamedText,
+            reasoningContent: streamedReasoningContent,
+          }),
+        );
         continue;
       }
       if (event.type === "content_delta") {
         streamedText += event.text;
-        assistantSessionMessage.update(createStreamingAssistantMessage({
-          text: streamedText,
-          reasoningContent: streamedReasoningContent,
-        }));
+        assistantSessionMessage.update(
+          createStreamingAssistantMessage({
+            text: streamedText,
+            reasoningContent: streamedReasoningContent,
+          }),
+        );
         continue;
       }
-      response = event.response;
+      if (event.type === "done") {
+        response = event.response;
+      }
     }
 
     if (!response) {
