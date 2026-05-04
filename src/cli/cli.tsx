@@ -453,11 +453,13 @@ export async function startCli() {
     // file deletion for /clear is handled explicitly in the slash command.
     session.onCleared(rerender);
 
-    session.onMessageCommitted(async () => {
-        // Auto-save after each committed message
+    const saveAndRerender = async () => {
         await writeSessionFile(session, CURRENT_SESSION_FILE);
         rerender();
-    });
+    };
+
+    session.onMessageCommitted(saveAndRerender);
+    session.onMessageUpdated(saveAndRerender);
 }
 
 function formatEnvErrors(issues: { path: PropertyKey[]; message: string }[]): string {
@@ -489,7 +491,7 @@ function formatSessionStatus(agent: Agent, session: Session): string {
         message.role === "assistant" ? count + (message.toolCalls?.length ?? 0) : count
     ), 0);
     const failedToolResultCount = messages.filter(
-        (message) => message.role === "tool" && message.type === "error",
+        (message) => message.role === "tool" && message.status === "error",
     ).length;
     const agentErrorCount = messages.filter((message) => message.role === "agent").length;
     const transcriptCharacters = messages.reduce((count, message) => count + message.text.length, 0);

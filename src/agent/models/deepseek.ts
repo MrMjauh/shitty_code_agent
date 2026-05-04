@@ -14,6 +14,7 @@ export class DeepSeek extends OpenAiCompatibleProvider {
             model: options.model,
             apiKey: options.apiKey,
             apiUrl: DEEPSEEK_API_URL,
+            streaming: true,
         });
     }
 }

@@ -59,17 +59,18 @@ export type Message = {
 } | {
     role: "assistant"
     text: string
+    reasoningContent?: string;
     toolCalls?: ToolCall[];
 } | {
     role: "tool"
     text: string;
-    type: "success" | "error";
+    status: "success" | "error";
     reasoningContent?: string;
     toolCallId?: string;
     toolName?: string;
 } | {
     role: "agent"
-    type: "error";
+    status: "error";
     text: string
 } | {
     role: "slash_command",
@@ -88,4 +89,3 @@ export type Result<T,E> = {
     success: false,
     error: E
 }
- 

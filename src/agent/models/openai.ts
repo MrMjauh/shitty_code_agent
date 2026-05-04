@@ -14,6 +14,7 @@ export class OpenAi extends OpenAiCompatibleProvider {
             model: options.model,
             apiKey: options.apiKey,
             apiUrl: OPENAI_API_URL,
+            streaming: false,
         });
     }
 }

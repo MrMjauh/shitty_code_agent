@@ -56,6 +56,19 @@ export function renderBlocksForWidth(blocks: Block[], width: number): React.Reac
                 });
                 break;
             }
+            case "reasoning":
+                block.text.split("\n").forEach((line, i) => {
+                    const wrapped = wrapLine(line, usableWidth - 2);
+                    wrapped.forEach((wrappedLine, wrappedIndex) => {
+                        rows.push(
+                            <Box>
+                                <Text color="gray" bold>{i === 0 && wrappedIndex === 0 ? "◇ " : "  "}</Text>
+                                <Text color="gray">{wrappedLine}</Text>
+                            </Box>,
+                        );
+                    });
+                });
+                break;
             case "error":
                 block.text.split("\n").forEach((line, i) => {
                     const wrapped = wrapLine(line, usableWidth - 2);

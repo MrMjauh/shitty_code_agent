@@ -2,6 +2,7 @@ export type SlashCommand = { name: string; description: string };
 
 export type Block =
     | { kind: "user"; text: string }
+    | { kind: "reasoning"; text: string }
     | { kind: "assistant"; text: string }
     | { kind: "error"; text: string }
     | { kind: "tool_call"; tool: string; summary: string }

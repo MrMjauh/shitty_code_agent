@@ -18,6 +18,9 @@ export function buildBlocks(messages: Message[], loading: boolean): Block[] {
             continue;
         }
         if (message.role === "assistant") {
+            if (message.reasoningContent?.trim()) {
+                blocks.push({ kind: "reasoning", text: message.reasoningContent });
+            }
             if (message.text.trim().length > 0) {
                 blocks.push({ kind: "assistant", text: message.text });
             }
@@ -34,11 +37,19 @@ export function buildBlocks(messages: Message[], loading: boolean): Block[] {
         }
     }
 
-    if (loading) {
+    if (loading && !hasActiveAssistantProgress(messages)) {
         blocks.push({ kind: "status", text: "thinking..." });
     }
 
     return blocks;
+}
+
+function hasActiveAssistantProgress(messages: Message[]): boolean {
+    const lastMessage = messages.at(-1);
+    return lastMessage?.role === "assistant" && (
+        lastMessage.text.trim().length > 0 ||
+        !!lastMessage.reasoningContent?.trim()
+    );
 }
 
 function formatToolArgs(input: unknown): string {

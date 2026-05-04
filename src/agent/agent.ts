@@ -55,33 +55,31 @@ export class Agent {
   }
 
   public async sendMessage(msg: string): Promise<Result<Message, Message>> {
-    const { compileInstructions, provider, tools, maxLoops } = this.options;
+    const { compileInstructions, tools, maxLoops } = this.options;
 
     // By recompiling each time, we can load in different tools etc during an active session
     const systemMessage: Message = {
       role: "system",
       text: compileInstructions({ tools, maxLoops }),
     };
-    const msgs: Message[] = this.session
+
+    const context: Message[] = this.session
       .getMessages()
       .filter((value) => INCLUDE_IN_CONTEXT[value.msg.role])
-      .map((value) => value.msg);
+      .map((value) => stripReasoningContent(value.msg));
 
     const userMessage: Message = { role: "user", text: msg };
     this.session.commitMessage(userMessage);
-    msgs.push(userMessage);
+    context.push(userMessage);
 
     let response: ModelResponse;
     try {
-      response = await provider.generateContent(
+      response = await this.generateAssistantResponse(
         systemMessage,
-        msgs,
+        context,
         tools,
       );
-
-      const assistantMessage = createAssistantMessage(response);
-      this.session.commitMessage(createAssistantMessage(response));
-      msgs.push(assistantMessage);
+      context.push(createAssistantMessage(response));
     } catch (error) {
       throw error;
     }
@@ -101,26 +99,22 @@ export class Agent {
 
         const toolMessage: Message = {
           role: "tool",
-          type: toolResult.success ? "success" : "error",
+          status: toolResult.success ? "success" : "error",
           text: toolResult.success ? JSON.stringify(toolResult.result) : toolResult.error,
           toolCallId: toolCall.id,
           toolName: toolCall.name,
         };
         this.session.commitMessage(toolMessage);
-        msgs.push(toolMessage);
+        context.push(toolMessage);
       }
 
-      // Here we dont send a message, but generate content from the new set of tool calls
       try {
-        const toolResponse = await provider.generateContent(
+        response = await this.generateAssistantResponse(
           systemMessage,
-          msgs,
+          context,
           tools,
         );
-        const toolResponseMessage = createAssistantMessage(toolResponse);
-        this.session.commitMessage(toolResponseMessage);
-        msgs.push(toolResponseMessage);
-        response = toolResponse;
+        context.push(createAssistantMessage(response));
       } catch (error) {
         throw error
       }
@@ -129,7 +123,7 @@ export class Agent {
     if (loops >= maxLoops) {
       const message: Message = {
         role: "agent",
-        type: "error",
+        status: "error",
         text: `Stopped after ${maxLoops} tool call iterations to avoid a possible infinite loop.`,
       };
       this.session.commitMessage(message);
@@ -160,6 +154,51 @@ export class Agent {
       };
     }
   }
+
+  private async generateAssistantResponse(
+    systemMessage: Message,
+    context: Message[],
+    tools: Tool[],
+  ): Promise<ModelResponse> {
+    const { provider } = this.options;
+
+    let response: ModelResponse | undefined;
+    let streamedText = "";
+    let streamedReasoningContent = "";
+    const assistantSessionMessage = this.session.commitMessage(createStreamingAssistantMessage({
+      text: streamedText,
+      reasoningContent: streamedReasoningContent,
+    }));
+
+    for await (const event of provider.generateContent(systemMessage, context, tools)) {
+      if (event.type === "reasoning_delta") {
+        streamedReasoningContent += event.text;
+        assistantSessionMessage.update(createStreamingAssistantMessage({
+          text: streamedText,
+          reasoningContent: streamedReasoningContent,
+        }));
+        continue;
+      }
+      if (event.type === "content_delta") {
+        streamedText += event.text;
+        assistantSessionMessage.update(createStreamingAssistantMessage({
+          text: streamedText,
+          reasoningContent: streamedReasoningContent,
+        }));
+        continue;
+      }
+      response = event.response;
+    }
+
+    if (!response) {
+      throw new Error(`Empty response from ${provider.getProvider()}`);
+    }
+
+    const assistantMessage = createAssistantMessage(response);
+    assistantSessionMessage.update(assistantMessage);
+
+    return response;
+  }
 }
 
 function createAssistantMessage(response: ModelResponse): Message {
@@ -170,5 +209,26 @@ function createAssistantMessage(response: ModelResponse): Message {
       ? { reasoningContent: response.reasoningContent }
       : {}),
     toolCalls: response.toolCalls,
+  };
+}
+
+function stripReasoningContent(message: Message): Message {
+  if (message.role !== "assistant" || !message.reasoningContent) return message;
+
+  const { reasoningContent: _reasoningContent, ...rest } = message;
+  return rest;
+}
+
+function createStreamingAssistantMessage(options: {
+  text: string;
+  reasoningContent: string;
+}): Message {
+  return {
+    role: "assistant",
+    text: options.text,
+    ...(options.reasoningContent
+      ? { reasoningContent: options.reasoningContent }
+      : {}),
+    toolCalls: [],
   };
 }
