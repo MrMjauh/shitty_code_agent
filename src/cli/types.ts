@@ -14,13 +14,17 @@ export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", 
 
 export const SLASH_COMMANDS: SlashCommand[] = [
     { name: "/clear", description: "Clear the current conversation" },
-    { name: "/help", description: "Show available slash commands" },
     { name: "/pwd", description: "Show the current working directory" },
+    { name: "/status", description: "Show session stats" },
     { name: "/system", description: "Show the current system instructions" },
-    { name: "/session save", description: "Save the current session (e.g., /session save my-chat)" },
-    { name: "/session load", description: "Load a saved session (e.g., /session load my-chat)" },
-    { name: "/session list", description: "List all saved sessions" },
-    { name: "/session delete", description: "Delete a saved session (e.g., /session delete my-chat)" },
-    { name: "/session reset", description: "Clear the current session and auto-save file" },
+    { name: "/session", description: "Save, load, list, delete, or reset sessions" },
     { name: "/exit", description: "Exit the agent" },
+];
+
+export const SESSION_SLASH_COMMANDS: SlashCommand[] = [
+    { name: "save", description: "Save the current session" },
+    { name: "load", description: "Load a saved session" },
+    { name: "list", description: "List all saved sessions" },
+    { name: "delete", description: "Delete a saved session" },
+    { name: "reset", description: "Clear the current session and auto-save file" },
 ];

@@ -1,6 +1,6 @@
 import path from "node:path";
 import React, { useEffect, useMemo, useState } from "react";
-import { render, Box, Text, useInput, useStdout } from "ink";
+import { render, Box, Text, useInput, usePaste, useStdout } from "ink";
 import TextInput from "ink-text-input";
 import type { Message } from "../shared/types.js";
 import { Agent } from "../agent/agent.js";
@@ -9,11 +9,10 @@ import { WriteFileTool } from "../tools/write.js";
 import { ReadFileTool } from "../tools/read.js";
 import { SearchTool } from "../tools/search.js";
 import { EditFileTool } from "../tools/edit.js";
-import { ACCENT, SLASH_COMMANDS } from "./types.js";
+import { ACCENT, SESSION_SLASH_COMMANDS, SLASH_COMMANDS, type SlashCommand } from "./types.js";
 import { buildBlocks } from "./blocks.js";
 import { Welcome } from "./components/Welcome.js";
 import { Transcript, renderBlocks } from "./components/Transcript.js";
-import { Spinner } from "./components/Spinner.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { SlashCommandDropdown } from "./components/SlashCommandDropdown.js";
 import { modelConfigurationSchema } from "../shared/env.js";
@@ -30,6 +29,7 @@ import {
 
 const SESSION_DIR = path.join(process.cwd(), "sessions");
 const CURRENT_SESSION_FILE = path.join(SESSION_DIR, ".current.json");
+const SESSION_COMMANDS_WITH_NAME = new Set(["save", "load", "delete"]);
 
 function Chat(props: {
     agent: Agent;
@@ -37,6 +37,9 @@ function Chat(props: {
     messages: Message[];
 }) {
     const [input, setInput] = useState("");
+    const [inputVersion, setInputVersion] = useState(0);
+    const [typedSlashCommandInput, setTypedSlashCommandInput] = useState(false);
+    const [inputIncludesPaste, setInputIncludesPaste] = useState(false);
     const [loading, setLoading] = useState(false);
     const [selectedSlashCommandIndex, setSelectedSlashCommandIndex] = useState(0);
     const [slashCommandOutput, setSlashCommandOutput] = useState<{
@@ -45,19 +48,101 @@ function Chat(props: {
     } | undefined>();
     const { stdout } = useStdout();
     const width = Math.max(20, (stdout.columns || 80) - 2);
-    const matchingSlashCommands = input.startsWith("/")
-        ? SLASH_COMMANDS.filter((c) => c.name.startsWith(input.trim()))
+    const trimmedInput = input.trim();
+    const shouldTreatAsSlashCommand =
+        input.startsWith("/") && typedSlashCommandInput && !inputIncludesPaste;
+    const isSessionCommandInput = trimmedInput === "/session" || input.startsWith("/session ");
+    const sessionCommandInput = input.slice("/session".length).trimStart();
+    const sessionCommandParts = sessionCommandInput.length > 0
+        ? sessionCommandInput.split(/\s+/)
         : [];
+    const isSelectingSessionSubcommand =
+        shouldTreatAsSlashCommand &&
+        isSessionCommandInput &&
+        (
+            sessionCommandParts.length === 0 ||
+            (sessionCommandParts.length === 1 && !/\s$/.test(input))
+        );
+    const matchingSlashCommands = shouldTreatAsSlashCommand
+        ? isSelectingSessionSubcommand
+            ? SESSION_SLASH_COMMANDS.filter((command) =>
+                command.name.startsWith(sessionCommandInput),
+            )
+            : SLASH_COMMANDS.filter((command) => command.name.startsWith(trimmedInput))
+        : [];
+    const isNestedSlashCommandMenu = matchingSlashCommands.length > 0 && isSelectingSessionSubcommand;
 
     const blocks = useMemo(() => buildBlocks(props.messages, loading), [props.messages, loading]);
     const rows = useMemo(() => renderBlocks(blocks, width), [blocks, width]);
+
+    function getSelectedSlashCommand(): SlashCommand | undefined {
+        return matchingSlashCommands[selectedSlashCommandIndex] ?? matchingSlashCommands[0];
+    }
+
+    function getSlashCommandCompletion(command: SlashCommand): string {
+        if (isSessionCommandInput) {
+            return SESSION_COMMANDS_WITH_NAME.has(command.name)
+                ? `/session ${command.name} `
+                : `/session ${command.name}`;
+        }
+
+        return command.name === "/session" ? "/session " : command.name;
+    }
+
+    function updateInput(value: string) {
+        if (loading) return;
+        setInput(value);
+        if (!value.startsWith("/")) {
+            setTypedSlashCommandInput(false);
+            setInputIncludesPaste(false);
+        }
+        if (!value) {
+            setInputIncludesPaste(false);
+        }
+    }
+
+    function completeSlashCommand(value: string) {
+        updateInput(value);
+        setTypedSlashCommandInput(true);
+        setInputIncludesPaste(false);
+        setInputVersion((version) => version + 1);
+    }
 
     useEffect(() => {
         setSelectedSlashCommandIndex(0);
     }, [input]);
 
-    useInput((_, key) => {
+    useInput((inputValue, key) => {
+        if (loading) return;
+
+        if (inputValue === "/" && input.length === 0) {
+            setTypedSlashCommandInput(true);
+            setInputIncludesPaste(false);
+        } else if (input.length === 0 && inputValue.length > 0 && !key.return) {
+            setTypedSlashCommandInput(false);
+        }
+
         if (matchingSlashCommands.length > 0) {
+            if (isNestedSlashCommandMenu) {
+                if (key.escape) {
+                    updateInput("");
+                    return;
+                }
+                if (key.backspace || key.delete) {
+                    completeSlashCommand(input.slice(0, -1));
+                    return;
+                }
+                if (
+                    inputValue.length > 0 &&
+                    !key.return &&
+                    !key.tab &&
+                    !key.ctrl &&
+                    !key.meta
+                ) {
+                    completeSlashCommand(input + inputValue);
+                    return;
+                }
+            }
             if (key.upArrow) {
                 setSelectedSlashCommandIndex((i) =>
                     i === 0 ? matchingSlashCommands.length - 1 : i - 1,
@@ -68,7 +153,32 @@ function Chat(props: {
                     i === matchingSlashCommands.length - 1 ? 0 : i + 1,
                 );
             }
+            if (key.tab) {
+                const selectedCommand = getSelectedSlashCommand();
+                if (selectedCommand) {
+                    completeSlashCommand(getSlashCommandCompletion(selectedCommand));
+                }
+            }
+            if (key.return && isNestedSlashCommandMenu) {
+                const selectedCommand = getSelectedSlashCommand();
+                if (!selectedCommand) return;
+                if (SESSION_COMMANDS_WITH_NAME.has(selectedCommand.name)) {
+                    completeSlashCommand(`/session ${selectedCommand.name} `);
+                    return;
+                }
+                void handleSlashCommand(`/session ${selectedCommand.name}`);
+            }
             return;
+        }
+    });
+
+    usePaste((text) => {
+        if (loading) return;
+
+        updateInput(input + text);
+        setInputIncludesPaste(true);
+        if (input.length === 0) {
+            setTypedSlashCommandInput(false);
         }
     });
 
@@ -84,18 +194,16 @@ function Chat(props: {
                 setSlashCommandOutput(undefined);
                 return true;
             }
-            case "/help":
-                setSlashCommandOutput({
-                    title: "/help",
-                    text: SLASH_COMMANDS.map((slashCommand) =>
-                        `${slashCommand.name} - ${slashCommand.description}`,
-                    ).join("\n"),
-                });
-                return true;
             case "/pwd":
                 setSlashCommandOutput({
                     title: "/pwd",
                     text: process.cwd(),
+                });
+                return true;
+            case "/status":
+                setSlashCommandOutput({
+                    title: "/status",
+                    text: formatSessionStatus(props.agent, props.session),
                 });
                 return true;
             case "/system":
@@ -225,11 +333,26 @@ function Chat(props: {
 
     async function handleSubmit(value: string) {
         if (!value.trim() || loading) return;
-        setInput("");
-        if (value.trim().startsWith("/")) {
+        updateInput("");
+        if (value.trim().startsWith("/") && shouldTreatAsSlashCommand) {
+            if (isSessionCommandInput && matchingSlashCommands.length > 0) {
+                const selectedCommand = getSelectedSlashCommand();
+                if (!selectedCommand) return;
+                if (SESSION_COMMANDS_WITH_NAME.has(selectedCommand.name)) {
+                    completeSlashCommand(`/session ${selectedCommand.name} `);
+                    return;
+                }
+                const handled = await handleSlashCommand(`/session ${selectedCommand.name}`);
+                if (handled) return;
+            }
+
             const selectedCommand = matchingSlashCommands.length > 0
-                ? matchingSlashCommands[selectedSlashCommandIndex]
+                ? getSelectedSlashCommand()
                 : undefined;
+            if (selectedCommand?.name === "/session") {
+                completeSlashCommand("/session ");
+                return;
+            }
             const handled = await handleSlashCommand(selectedCommand?.name ?? value);
             if (handled) return;
         }
@@ -253,6 +376,26 @@ function Chat(props: {
                 )}
             </Box>
 
+            <Box borderStyle="round" borderColor={loading ? "gray" : ACCENT} paddingX={1}>
+                <Text color={loading ? "gray" : ACCENT} bold>
+                    ❯{" "}
+                </Text>
+                {isNestedSlashCommandMenu ? (
+                    <>
+                        <Text color={ACCENT}>/session</Text>
+                        <Text color="gray"> choose action</Text>
+                    </>
+                ) : (
+                    <TextInput
+                        key={inputVersion}
+                        value={input}
+                        onChange={updateInput}
+                        onSubmit={handleSubmit}
+                        placeholder={loading ? "Working..." : "Ask anything, or type / for commands"}
+                    />
+                )}
+            </Box>
+
             {matchingSlashCommands.length > 0 && (
                 <SlashCommandDropdown
                     commands={matchingSlashCommands}
@@ -268,19 +411,6 @@ function Chat(props: {
                     ))}
                 </Box>
             )}
-
-            <Box borderStyle="round" borderColor={loading ? "yellow" : ACCENT} paddingX={1}>
-                <Text color={loading ? "yellow" : ACCENT} bold>
-                    {loading ? <Spinner /> : "❯"}
-                    {" "}
-                </Text>
-                <TextInput
-                    value={input}
-                    onChange={setInput}
-                    onSubmit={handleSubmit}
-                    placeholder={loading ? "Working..." : "Ask anything, or type / for commands"}
-                />
-            </Box>
 
             <StatusBar agent={props.agent} loading={loading} />
         </Box>
@@ -308,13 +438,6 @@ export async function startCli() {
             new SearchTool(),
         ],
     });
-
-    // Auto-load previous session on startup
-    try {
-        await readSessionFile(session, CURRENT_SESSION_FILE);
-    } catch {
-        // No previous session — that's fine
-    }
 
     const renderChat = () => (
         <Chat
@@ -344,4 +467,46 @@ function formatEnvErrors(issues: { path: PropertyKey[]; message: string }[]): st
             return `- ${path || "MODEL_PROVIDER"}: ${issue.message}`;
         })
         .join("\n");
+}
+
+function formatSessionStatus(agent: Agent, session: Session): string {
+    const messages = session.getMessages().map(({ msg }) => msg);
+    const roleCounts = messages.reduce<Record<Message["role"], number>>(
+        (counts, message) => ({
+            ...counts,
+            [message.role]: counts[message.role] + 1,
+        }),
+        {
+            agent: 0,
+            assistant: 0,
+            slash_command: 0,
+            system: 0,
+            tool: 0,
+            user: 0,
+        },
+    );
+    const toolCallCount = messages.reduce((count, message) => (
+        message.role === "assistant" ? count + (message.toolCalls?.length ?? 0) : count
+    ), 0);
+    const failedToolResultCount = messages.filter(
+        (message) => message.role === "tool" && message.type === "error",
+    ).length;
+    const agentErrorCount = messages.filter((message) => message.role === "agent").length;
+    const transcriptCharacters = messages.reduce((count, message) => count + message.text.length, 0);
+    const systemMessageCharacters = agent.getSystemInstructions().length;
+    const provider = agent.getProvider();
+
+    return [
+        `Provider: ${provider.getProvider()}`,
+        `Model: ${provider.getModel()}`,
+        `Messages: ${messages.length}`,
+        `User messages: ${roleCounts.user}`,
+        `Assistant messages: ${roleCounts.assistant}`,
+        `Tool calls: ${toolCallCount}`,
+        `Tool results: ${roleCounts.tool}`,
+        `Failed tool results: ${failedToolResultCount}`,
+        `Agent errors: ${agentErrorCount}`,
+        `Transcript size: ${transcriptCharacters} characters`,
+        `System message size: ${systemMessageCharacters} characters`,
+    ].join("\n");
 }

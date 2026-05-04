@@ -16,6 +16,11 @@ export const modelConfigurationSchema = z.discriminatedUnion("MODEL_PROVIDER", [
         MODEL_PROVIDER: z.literal("deepseek"),
         DEEPSEEK_API_KEY: requiredEnvValue("DEEPSEEK_API_KEY"),
         DEEPSEEK_MODEL: requiredEnvValue("DEEPSEEK_MODEL"),
+    }),
+    z.object({
+        MODEL_PROVIDER: z.literal("claude"),
+        CLAUDE_CLI_PATH: requiredEnvValue("CLAUDE_CLI_PATH"),
+        CLAUDE_MODEL: requiredEnvValue("CLAUDE_MODEL"),
     })
 ])
 

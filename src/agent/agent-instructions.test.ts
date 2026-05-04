@@ -8,6 +8,8 @@ describe("SystemInstructions", () => {
           "You are a coding agent working in the user's current repository.
 
           Work carefully:
+          - For casual conversation, greetings, or simple non-code questions, respond directly without using tools.
+          - Use tools only when they materially help answer the user's request.
           - Inspect relevant files before proposing or making edits.
           - Prefer small, scoped changes that match existing code style.
           - Do not overwrite unrelated user changes.
@@ -51,6 +53,8 @@ describe("SystemInstructions", () => {
           "You are a coding agent working in the user's current repository.
 
           Work carefully:
+          - For casual conversation, greetings, or simple non-code questions, respond directly without using tools.
+          - Use tools only when they materially help answer the user's request.
           - Inspect relevant files before proposing or making edits.
           - Prefer small, scoped changes that match existing code style.
           - Do not overwrite unrelated user changes.
