@@ -51,10 +51,41 @@ export type ModelResponse = {
 };
 
 export type Message = {
-    role: "system" | "user" | "assistant" | "tool" | "error";
-    text: string;
-    reasoningContent?: string;
+    role: "system"
+    text: string
+} | {
+    role: "user"
+    text: string
+} | {
+    role: "assistant"
+    text: string
     toolCalls?: ToolCall[];
+} | {
+    role: "tool"
+    text: string;
+    type: "success" | "error";
+    reasoningContent?: string;
     toolCallId?: string;
     toolName?: string;
+} | {
+    role: "agent"
+    type: "error";
+    text: string
+} | {
+    role: "slash_command",
+    text: string
 }
+
+export type SessionMessage = {
+    id: string,
+    msg: Message
+}
+
+export type Result<T,E> = {
+    success: true,
+    result: T
+} | {
+    success: false,
+    error: E
+}
+ 

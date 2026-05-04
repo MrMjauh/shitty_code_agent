@@ -30,12 +30,8 @@ export class OpenAiCompatibleProvider implements Provider {
         return this.model;
     }
 
-    async sendMessage(msg: Message, history: Message[], tools: Tool[]): Promise<ModelResponse> {
-        return this.createCompletion([...history, msg], tools);
-    }
-
-    async generateContent(history: Message[], tools: Tool[]): Promise<ModelResponse> {
-        return this.createCompletion(history, tools);
+    async generateContent(system: Message, msgs: Message[], tools: Tool[]): Promise<ModelResponse> {
+        return this.createCompletion([system, ...msgs], tools);
     }
 
     private async createCompletion(messages: Message[], tools: Tool[]): Promise<ModelResponse> {
@@ -90,7 +86,7 @@ export class OpenAiCompatibleProvider implements Provider {
 }
 
 function formatMessage(message: Message) {
-    const reasoningContent = message.reasoningContent
+    const reasoningContent = "reasoningContent" in message && message.reasoningContent
         ? { reasoning_content: message.reasoningContent }
         : {};
 

@@ -2,13 +2,13 @@ import type { Tool } from "../tools/tools.js";
 
 export type AgentInstructionOptions = {
     tools: Tool[];
-    maxToolIterations: number;
+    maxLoops: number;
 };
 
 export type AgentInstructions = (options: AgentInstructionOptions) => string;
 
-export const DEFAULT_AGENT_INSTRUCTIONS: AgentInstructions = ({ tools, maxToolIterations }) => {
-    const base = formatBaseInstructions(maxToolIterations);
+export const DEFAULT_AGENT_INSTRUCTIONS: AgentInstructions = ({ tools, maxLoops }) => {
+    const base = formatBaseInstructions(maxLoops);
 
     if (tools.length === 0) return base;
 
@@ -17,14 +17,14 @@ export const DEFAULT_AGENT_INSTRUCTIONS: AgentInstructions = ({ tools, maxToolIt
     return `${base}\n\n## Tools\n\n${toolDocs}`;
 };
 
-function formatBaseInstructions(maxToolIterations: number) {
+function formatBaseInstructions(maxLoops: number) {
     const workCarefully = [
         "Work carefully:",
         "- Inspect relevant files before proposing or making edits.",
         "- Prefer small, scoped changes that match existing code style.",
         "- Do not overwrite unrelated user changes.",
         "- Paths are relative to the current working directory.",
-        `- You can make at most ${maxToolIterations} tool calls in a single user turn. Plan tool use accordingly.`,
+        `- You can make at most ${maxLoops} loops in a single user turn. Plan tool use accordingly.`,
     ];
 
     const sections = [

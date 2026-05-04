@@ -18,9 +18,14 @@ import { SlashCommandDropdown } from "./components/SlashCommandDropdown.js";
 import { modelConfigurationSchema } from "../shared/env.js";
 import { CodeAgentError } from "../shared/error.js";
 import { createProviderFromConfig } from "../agent/models/index.js";
+import { Session } from "../shared/session.js";
+import { createFileLogger } from "../agent/logger.js";
 
-function Chat(props: { agent: Agent }) {
-    const [messages, setMessages] = useState<Message[]>([]);
+function Chat(props: {
+    agent: Agent;
+    session: Session;
+    messages: Message[];
+}) {
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
     const [selectedSlashCommandIndex, setSelectedSlashCommandIndex] = useState(0);
@@ -34,13 +39,9 @@ function Chat(props: { agent: Agent }) {
     const dropdownHeight = matchingSlashCommands.length > 0 ? matchingSlashCommands.length + 2 : 0;
     const transcriptHeight = Math.max(4, height - dropdownHeight - 5);
 
-    const blocks = useMemo(() => buildBlocks(messages, loading), [messages, loading]);
+    const blocks = useMemo(() => buildBlocks(props.messages, loading), [props.messages, loading]);
     const rows = useMemo(() => renderBlocks(blocks), [blocks]);
     const maxScrollOffset = Math.max(0, rows.length - transcriptHeight);
-
-    useEffect(() => {
-        props.agent.onNewMessage((msg, history) => setMessages([msg, ...history]));
-    }, [props.agent]);
 
     useEffect(() => {
         setSelectedSlashCommandIndex(0);
@@ -101,33 +102,22 @@ function Chat(props: { agent: Agent }) {
         }
     });
 
-    function addLocalMessage(text: string) {
-        setMessages((prev) => [...prev, { role: "assistant", text }]);
-    }
-
     function handleSlashCommand(value: string): boolean {
         const [command] = value.trim().split(/\s+/);
         switch (command) {
             case "/clear":
-                props.agent.clearHistory();
-                setMessages([]);
+                props.session.clear();
                 stickToBottomRef.current = true;
                 return true;
             case "/help":
-                addLocalMessage(
-                    `**Available commands**\n\n${SLASH_COMMANDS.map((c) => `- \`${c.name}\` — ${c.description}`).join("\n")}`,
-                );
                 return true;
             case "/pwd":
-                addLocalMessage(`\`${process.cwd()}\``);
                 return true;
             case "/system":
-                addLocalMessage(props.agent.getSystemInstructions());
                 return true;
             case "/exit":
                 process.exit(0);
             default:
-                addLocalMessage(`Unknown command: ${command}. Type /help for available commands.`);
                 return true;
         }
     }
@@ -152,7 +142,7 @@ function Chat(props: { agent: Agent }) {
     return (
         <Box flexDirection="column" height={height} paddingX={1}>
             <Box flexDirection="column" height={transcriptHeight}>
-                {messages.length === 0 && !loading ? (
+                {props.messages.length === 0 && !loading ? (
                     <Welcome agent={props.agent} />
                 ) : (
                     <Transcript
@@ -192,10 +182,16 @@ function Chat(props: { agent: Agent }) {
 export function startCli() {
     const modelConfiguration = modelConfigurationSchema.safeParse(process.env);
     if (modelConfiguration.error) {
-        throw new CodeAgentError("Cannot start cli, missing envs", modelConfiguration.error);
+        throw new CodeAgentError(
+            `Cannot start cli, invalid model configuration:\n${formatEnvErrors(modelConfiguration.error.issues)}`,
+        );
     }
+    const logger = createFileLogger();
+    const session = new Session();
     const provider = createProviderFromConfig(modelConfiguration.data);
-    const agent = new Agent({
+    const agent = new Agent(
+        session,
+    {
         provider,
         compileInstructions: DEFAULT_AGENT_INSTRUCTIONS,
         tools: [
@@ -205,5 +201,27 @@ export function startCli() {
             new SearchTool(),
         ],
     });
-    render(<Chat agent={agent} />);
+
+    const renderChat = () => (
+        <Chat
+            agent={agent}
+            session={session}
+            messages={session.getMessages().map(({ msg }) => msg)}
+        />
+    );
+    const app = render(renderChat());
+    const rerender = () => app.rerender(renderChat());
+    session.onCleared(rerender);
+    session.onNewMessage(rerender);
+    session.onMessageReverted(rerender);
+    session.onMessageCommited(rerender);
+}
+
+function formatEnvErrors(issues: { path: PropertyKey[]; message: string }[]): string {
+    return issues
+        .map((issue) => {
+            const path = issue.path.map(String).join(".");
+            return `- ${path || "MODEL_PROVIDER"}: ${issue.message}`;
+        })
+        .join("\n");
 }

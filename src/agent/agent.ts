@@ -2,220 +2,174 @@ import type { Tool } from "../tools/tools.js";
 import type { Provider } from "./models/provider.js";
 import { type AgentInstructions } from "./agent-instructions.js";
 import { createFileLogger, type AgentLogger } from "./logger.js";
-import type { Message, ModelResponse, ToolCall } from "../shared/types.js";
+import type {
+  Message,
+  ModelResponse,
+  Result,
+  ToolCall,
+} from "../shared/types.js";
+import type { Session } from "../shared/session.js";
 
 const DEFAULT_MAX_TOOL_ITERATIONS = 50;
-
-export type OnNewMessage = (msg: Message, history: Message[]) => void;
-export type AgentOptions = {
-    tools: Tool[];
-    provider: Provider;
-    compileInstructions: AgentInstructions;
-    maxToolIterations?: number;
-    logger?: AgentLogger;
+const INCLUDE_IN_CONTEXT: Record<Message["role"], boolean> = {
+  agent: true,
+  assistant: true,
+  slash_command: false,
+  system: true,
+  tool: true,
+  user: true,
 };
 
+export type OnNewMessage = (msg: Message, systemMessage: Message) => void;
+export type AgentOptions = {
+  tools: Tool[];
+  provider: Provider;
+  compileInstructions: AgentInstructions;
+  maxLoops?: number;
+};
+
+type ResolvedAgentOptions = Required<AgentOptions>;
+
 export class Agent {
+  private session: Session;
+  private options: ResolvedAgentOptions;
 
-    private options: Required<AgentOptions>;
-    private history: Message[] = [];
-    private onNewMessageCallback: OnNewMessage = () => {};
+  constructor(session: Session, options: AgentOptions) {
+    this.session = session;
+    this.options = {
+      tools: options.tools,
+      provider: options.provider,
+      compileInstructions: options.compileInstructions,
+      maxLoops: options.maxLoops ?? DEFAULT_MAX_TOOL_ITERATIONS,
+    };
+  }
 
-    constructor(options: AgentOptions) {
-        this.options = {
-            ...options,
-            maxToolIterations: options.maxToolIterations ?? DEFAULT_MAX_TOOL_ITERATIONS,
-            logger: options.logger ?? createFileLogger(),
+  public getProvider(): Provider {
+    return this.options.provider;
+  }
+
+  public getSystemInstructions() {
+    return this.options.compileInstructions({
+      tools: this.options.tools,
+      maxLoops: this.options.maxLoops,
+    });
+  }
+
+  public async sendMessage(msg: string): Promise<Result<Message, Message>> {
+    const { compileInstructions, provider, tools, maxLoops } = this.options;
+
+    // By recompiling each time, we can load in different tools etc during an active session
+    const systemMessage: Message = {
+      role: "system",
+      text: compileInstructions({ tools, maxLoops }),
+    };
+    const msgs: Message[] = this.session
+      .getMessages()
+      .filter((value) => INCLUDE_IN_CONTEXT[value.msg.role])
+      .map((value) => value.msg);
+
+    const userMessage: Message = { role: "user", text: msg };
+    this.session.commitMessage(userMessage);
+    msgs.push(userMessage);
+
+    let response: ModelResponse;
+    try {
+      response = await provider.generateContent(
+        systemMessage,
+        msgs,
+        tools,
+      );
+
+      const assistantMessage = createAssistantMessage(response);
+      this.session.commitMessage(createAssistantMessage(response));
+      msgs.push(assistantMessage);
+    } catch (error) {
+      throw error;
+    }
+
+    let loops = 0;
+
+    for (; loops < maxLoops; loops++) {
+      if (response.toolCalls.length === 0) break;
+
+      // Iterate over all tools, and it to the history
+      for (const toolCall of response.toolCalls) {
+        const tool = tools.find((t) => t.name() === toolCall.name);
+
+        const toolResult: Result<unknown, string> = tool
+          ? await this.executeTool(tool, toolCall)
+          : { success: false, error: `Unknown tool: ${toolCall.name}` };
+
+        const toolMessage: Message = {
+          role: "tool",
+          type: toolResult.success ? "success" : "error",
+          text: toolResult.success ? JSON.stringify(toolResult.result) : toolResult.error,
+          toolCallId: toolCall.id,
+          toolName: toolCall.name,
         };
+        this.session.commitMessage(toolMessage);
+        msgs.push(toolMessage);
+      }
+
+      // Here we dont send a message, but generate content from the new set of tool calls
+      try {
+        const toolResponse = await provider.generateContent(
+          systemMessage,
+          msgs,
+          tools,
+        );
+        const toolResponseMessage = createAssistantMessage(toolResponse);
+        this.session.commitMessage(toolResponseMessage);
+        msgs.push(toolResponseMessage);
+        response = toolResponse;
+      } catch (error) {
+        throw error
+      }
     }
 
-    public onNewMessage(callback: OnNewMessage) {
-        this.onNewMessageCallback = callback;
+    if (loops >= maxLoops) {
+      const message: Message = {
+        role: "agent",
+        type: "error",
+        text: `Stopped after ${maxLoops} tool call iterations to avoid a possible infinite loop.`,
+      };
+      this.session.commitMessage(message);
+
+      return {
+        success: false,
+        error: message,
+      };
     }
 
-    public clearHistory() {
-        this.history = [];
+    return {
+      success: true,
+      result: createAssistantMessage(response),
+    };
+  }
+
+  private async executeTool(tool: Tool, toolCall: ToolCall): Promise<Result<unknown, string>> {
+    try {
+      const result = await tool.execute(toolCall.input);
+      return {
+        success: true,
+        result,
+      } 
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
-
-    public getProvider(): Provider {
-        return this.options.provider;
-    }
-
-    public getSystemInstructions() {
-        return this.options.compileInstructions({
-            tools: this.options.tools,
-            maxToolIterations: this.options.maxToolIterations,
-        });
-    }
-
-    public async sendMessage(msg: string): Promise<string> {
-        const { compileInstructions, provider, tools, maxToolIterations } = this.options;
-        // By recompiling each time, we can load in different tools etc during an active session
-        const systemMessage: Message = { role: "system", text: compileInstructions({ tools, maxToolIterations }) };
-        // Buid the full message history
-        const sendMessageHistory: Message[] = [
-              systemMessage,
-            ...this.history,
-        ];
-
-        const userMessage: Message = { role: "user", text: msg };
-        this.onNewMessageCallback(userMessage, sendMessageHistory);
-        let response: ModelResponse;
-
-        try {
-            response = await provider.sendMessage(userMessage, sendMessageHistory, tools);
-        } catch (error) {
-            sendMessageHistory.push(userMessage);
-            return this.finishWithError(
-                sendMessageHistory,
-                "Provider failed while sending the message.",
-                "Provider sendMessage failed",
-                { error: formatError(error) },
-            );
-        }
-
-        const firstAssistantMessage = createAssistantMessage(response);
-
-        sendMessageHistory.push(userMessage);
-        this.onNewMessageCallback(firstAssistantMessage, sendMessageHistory);
-        sendMessageHistory.push(firstAssistantMessage);
-
-        let error: { msg: string} | undefined;
-        let toolIterations = 0;
-
-        while (true) {
-            if (response.toolCalls.length === 0) break;
-
-            if (toolIterations + response.toolCalls.length > maxToolIterations) {
-                error = {
-                    msg: `Stopped after ${maxToolIterations} tool call iterations to avoid a possible infinite loop.`
-                }
-                this.options.logger.error("Exceeded max tool iterations", {
-                    maxToolIterations,
-                    completedToolIterations: toolIterations,
-                    pendingToolCalls: response.toolCalls.map(formatToolCallForLog),
-                });
-                break;
-            }
-
-            // Iterate over all tools, and it to the history
-            for (const toolCall of response.toolCalls) {
-                toolIterations++;
-                const tool = tools.find((t) => t.name() === toolCall.name);
-
-                const toolResult = tool
-                    ? await this.executeTool(tool, toolCall)
-                    : { error: `Unknown tool: ${toolCall.name}` };
-
-                if (!tool) {
-                    this.options.logger.error("Unknown tool call", {
-                        toolCall: formatToolCallForLog(toolCall),
-                    });
-                } else if (isToolErrorResult(toolResult)) {
-                    this.options.logger.error("Tool returned an error", {
-                        toolCall: formatToolCallForLog(toolCall),
-                        error: toolResult.error,
-                    });
-                }
-
-                const toolMessage: Message = {
-                    role: "tool",
-                    text: JSON.stringify(toolResult),
-                    toolCallId: toolCall.id,
-                    toolName: toolCall.name,
-                };
-                this.onNewMessageCallback(toolMessage, sendMessageHistory);
-                sendMessageHistory.push(toolMessage);
-            }
-
-            // Here we dont send a message, but generate content from the new set of tool calls
-            try {
-                response = await provider.generateContent(sendMessageHistory, tools);
-            } catch (error) {
-                return this.finishWithError(
-                    sendMessageHistory,
-                    "Provider failed while generating content.",
-                    "Provider generateContent failed",
-                    { error: formatError(error) },
-                );
-            }
-            const assistantMessage = createAssistantMessage(response);
-            this.onNewMessageCallback(assistantMessage, sendMessageHistory);
-            sendMessageHistory.push(assistantMessage);
-        }
-    
-        if (error?.msg) {
-            const errorMsg: Message = { role: "error", text: error.msg };
-            sendMessageHistory.push(errorMsg);
-            this.onNewMessageCallback(errorMsg, sendMessageHistory);
-            this.history = sendMessageHistory.slice(1);
-            return error.msg;
-        }
-
-        // History now becomes, all but the first message (system message)
-        this.history = sendMessageHistory.slice(1);
-        return response.text;
-    }
-
-    private async executeTool(tool: Tool, toolCall: ToolCall) {
-        try {
-            return await tool.execute(toolCall.input);
-        } catch (error) {
-            return {
-                error: error instanceof Error ? error.message : String(error),
-            };
-        }
-    }
-
-    private finishWithError(
-        history: Message[],
-        userMessage: string,
-        logMessage: string,
-        metadata: Record<string, unknown>,
-    ) {
-        this.options.logger.error(logMessage, metadata);
-        const errorMsg: Message = { role: "error", text: userMessage };
-        history.push(errorMsg);
-        this.onNewMessageCallback(errorMsg, history);
-        this.history = history.slice(1);
-        return userMessage;
-    }
+  }
 }
 
 function createAssistantMessage(response: ModelResponse): Message {
-    return {
-        role: "assistant",
-        text: response.text,
-        ...(response.reasoningContent ? { reasoningContent: response.reasoningContent } : {}),
-        toolCalls: response.toolCalls,
-    };
-}
-
-function isToolErrorResult(result: unknown): result is { error: string } {
-    return Boolean(
-        result
-            && typeof result === "object"
-            && "error" in result
-            && typeof (result as Record<string, unknown>).error === "string"
-    );
-}
-
-function formatError(error: unknown) {
-    if (error instanceof Error) {
-        return {
-            name: error.name,
-            message: error.message,
-            stack: error.stack,
-        };
-    }
-
-    return { message: String(error) };
-}
-
-function formatToolCallForLog(toolCall: ToolCall) {
-    return {
-        id: toolCall.id,
-        name: toolCall.name,
-        input: toolCall.input,
-    };
+  return {
+    role: "assistant",
+    text: response.text,
+    ...(response.reasoningContent
+      ? { reasoningContent: response.reasoningContent }
+      : {}),
+    toolCalls: response.toolCalls,
+  };
 }
