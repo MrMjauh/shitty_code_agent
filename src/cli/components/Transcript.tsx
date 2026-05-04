@@ -5,39 +5,24 @@ import { renderMarkdown } from "../markdown.js";
 import { Spinner } from "./Spinner.js";
 
 export function Transcript(props: {
-    height: number;
     rows: React.ReactNode[];
-    scrollOffset: number;
-    maxScrollOffset: number;
 }) {
-    const offset = Math.min(props.scrollOffset, props.maxScrollOffset);
-    const showHeader = offset > 0;
-    const showFooter = offset > 0;
-    const reservedRows = (showHeader ? 1 : 0) + (showFooter ? 1 : 0);
-    const lineHeight = Math.max(1, props.height - reservedRows);
-    const start = Math.max(0, props.rows.length - lineHeight - offset);
-    const end = start + lineHeight;
-    const visible = props.rows.slice(start, end);
-    const hiddenAbove = start;
-    const hiddenBelow = Math.max(0, props.rows.length - end);
-
     return (
-        <Box flexDirection="column" height={props.height}>
-            {showHeader && (
-                <Text color="gray">↑ {hiddenAbove} more line{hiddenAbove === 1 ? "" : "s"} above</Text>
-            )}
-            {visible.map((row, index) => (
-                <Box key={`${start}-${index}`}>{row}</Box>
+        <Box flexDirection="column">
+            {props.rows.map((row, index) => (
+                <Box key={index}>{row}</Box>
             ))}
-            {showFooter && (
-                <Text color="gray">↓ {hiddenBelow} more line{hiddenBelow === 1 ? "" : "s"} below · press ↓ to follow</Text>
-            )}
         </Box>
     );
 }
 
-export function renderBlocks(blocks: Block[]): React.ReactNode[] {
+export function renderBlocks(blocks: Block[], width = Math.max(40, (process.stdout.columns || 100) - 2)): React.ReactNode[] {
+    return renderBlocksForWidth(blocks, width);
+}
+
+export function renderBlocksForWidth(blocks: Block[], width: number): React.ReactNode[] {
     const rows: React.ReactNode[] = [];
+    const usableWidth = Math.max(20, width);
 
     blocks.forEach((block, blockIndex) => {
         if (blockIndex > 0) rows.push(<Text> </Text>);
@@ -45,34 +30,43 @@ export function renderBlocks(blocks: Block[]): React.ReactNode[] {
         switch (block.kind) {
             case "user":
                 block.text.split("\n").forEach((line, i) => {
-                    rows.push(
-                        <Box>
-                            <Text color={ACCENT} bold>{i === 0 ? "❯ " : "  "}</Text>
-                            <Text color="white">{line}</Text>
-                        </Box>,
-                    );
+                    const wrapped = wrapLine(line, usableWidth - 2);
+                    wrapped.forEach((wrappedLine, wrappedIndex) => {
+                        rows.push(
+                            <Box>
+                                <Text color={ACCENT} bold>{i === 0 && wrappedIndex === 0 ? "❯ " : "  "}</Text>
+                                <Text color="white">{wrappedLine}</Text>
+                            </Box>,
+                        );
+                    });
                 });
                 break;
             case "assistant": {
                 const rendered = renderMarkdown(block.text);
                 rendered.split("\n").forEach((line, i) => {
-                    rows.push(
-                        <Box>
-                            <Text color="green" bold>{i === 0 ? "◆ " : "  "}</Text>
-                            <Text>{line}</Text>
-                        </Box>,
-                    );
+                    const wrapped = wrapLine(line, usableWidth - 2);
+                    wrapped.forEach((wrappedLine, wrappedIndex) => {
+                        rows.push(
+                            <Box>
+                                <Text color="green" bold>{i === 0 && wrappedIndex === 0 ? "◆ " : "  "}</Text>
+                                <Text>{wrappedLine}</Text>
+                            </Box>,
+                        );
+                    });
                 });
                 break;
             }
             case "error":
                 block.text.split("\n").forEach((line, i) => {
-                    rows.push(
-                        <Box>
-                            <Text color="red" bold>{i === 0 ? "! " : "  "}</Text>
-                            <Text color="red">{line}</Text>
-                        </Box>,
-                    );
+                    const wrapped = wrapLine(line, usableWidth - 2);
+                    wrapped.forEach((wrappedLine, wrappedIndex) => {
+                        rows.push(
+                            <Box>
+                                <Text color="red" bold>{i === 0 && wrappedIndex === 0 ? "! " : "  "}</Text>
+                                <Text color="red">{wrappedLine}</Text>
+                            </Box>,
+                        );
+                    });
                 });
                 break;
             case "tool_call":
@@ -104,4 +98,38 @@ export function renderBlocks(blocks: Block[]): React.ReactNode[] {
     });
 
     return rows;
+}
+
+function wrapLine(line: string, width: number): string[] {
+    if (visibleLength(line) <= width) return [line];
+
+    const rows: string[] = [];
+    let current = "";
+    let currentLength = 0;
+
+    for (let index = 0; index < line.length;) {
+        const ansi = line.slice(index).match(/^\x1b\[[0-9;]*m/);
+        if (ansi) {
+            current += ansi[0];
+            index += ansi[0].length;
+            continue;
+        }
+
+        const char = line[index] ?? "";
+        if (currentLength >= width) {
+            rows.push(current);
+            current = "";
+            currentLength = 0;
+        }
+        current += char;
+        currentLength++;
+        index++;
+    }
+
+    rows.push(current);
+    return rows;
+}
+
+function visibleLength(value: string): number {
+    return value.replace(/\x1b\[[0-9;]*m/g, "").length;
 }

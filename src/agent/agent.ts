@@ -1,7 +1,7 @@
 import type { Tool } from "../tools/tools.js";
 import type { Provider } from "./models/provider.js";
 import { type AgentInstructions } from "./agent-instructions.js";
-import { createFileLogger, type AgentLogger } from "./logger.js";
+import type { AgentLogger } from "./logger.js";
 import type {
   Message,
   ModelResponse,
@@ -25,6 +25,7 @@ export type AgentOptions = {
   tools: Tool[];
   provider: Provider;
   compileInstructions: AgentInstructions;
+  logger?: AgentLogger;
   maxLoops?: number;
 };
 
@@ -40,6 +41,7 @@ export class Agent {
       tools: options.tools,
       provider: options.provider,
       compileInstructions: options.compileInstructions,
+      logger: options.logger ?? { error: () => {} },
       maxLoops: options.maxLoops ?? DEFAULT_MAX_TOOL_ITERATIONS,
     };
   }
@@ -84,6 +86,7 @@ export class Agent {
       this.session.commitMessage(createAssistantMessage(response));
       msgs.push(assistantMessage);
     } catch (error) {
+      this.options.logger.error("Provider call failed on initial message", { error });
       throw error;
     }
 
@@ -123,11 +126,13 @@ export class Agent {
         msgs.push(toolResponseMessage);
         response = toolResponse;
       } catch (error) {
+        this.options.logger.error("Provider call failed during tool loop", { error, loop: loops });
         throw error
       }
     }
 
     if (loops >= maxLoops) {
+      this.options.logger.error("Max tool iterations reached", { maxLoops });
       const message: Message = {
         role: "agent",
         type: "error",
@@ -155,6 +160,11 @@ export class Agent {
         result,
       } 
     } catch (error) {
+      this.options.logger.error("Tool execution failed", {
+        tool: tool.name(),
+        toolCallId: toolCall.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),

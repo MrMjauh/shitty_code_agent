@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { render, Box, Text, useInput, useStdout } from "ink";
 import TextInput from "ink-text-input";
 import type { Message } from "../shared/types.js";
@@ -29,31 +29,22 @@ function Chat(props: {
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
     const [selectedSlashCommandIndex, setSelectedSlashCommandIndex] = useState(0);
-    const [scrollOffset, setScrollOffset] = useState(0);
-    const stickToBottomRef = useRef(true);
+    const [slashCommandOutput, setSlashCommandOutput] = useState<{
+        title: string;
+        text: string;
+    } | undefined>();
     const { stdout } = useStdout();
-    const height = stdout.rows || 24;
+    const width = Math.max(20, (stdout.columns || 80) - 2);
     const matchingSlashCommands = input.startsWith("/")
         ? SLASH_COMMANDS.filter((c) => c.name.startsWith(input.trim()))
         : [];
-    const dropdownHeight = matchingSlashCommands.length > 0 ? matchingSlashCommands.length + 2 : 0;
-    const transcriptHeight = Math.max(4, height - dropdownHeight - 5);
 
     const blocks = useMemo(() => buildBlocks(props.messages, loading), [props.messages, loading]);
-    const rows = useMemo(() => renderBlocks(blocks), [blocks]);
-    const maxScrollOffset = Math.max(0, rows.length - transcriptHeight);
+    const rows = useMemo(() => renderBlocks(blocks, width), [blocks, width]);
 
     useEffect(() => {
         setSelectedSlashCommandIndex(0);
     }, [input]);
-
-    useEffect(() => {
-        if (stickToBottomRef.current) {
-            setScrollOffset(0);
-        } else {
-            setScrollOffset((offset) => Math.min(offset, maxScrollOffset));
-        }
-    }, [rows.length, maxScrollOffset]);
 
     useInput((_, key) => {
         if (matchingSlashCommands.length > 0) {
@@ -69,37 +60,6 @@ function Chat(props: {
             }
             return;
         }
-
-        if (key.pageUp) {
-            setScrollOffset((offset) => {
-                const next = Math.min(maxScrollOffset, offset + Math.max(1, transcriptHeight - 2));
-                stickToBottomRef.current = next === 0;
-                return next;
-            });
-            return;
-        }
-        if (key.pageDown) {
-            setScrollOffset((offset) => {
-                const next = Math.max(0, offset - Math.max(1, transcriptHeight - 2));
-                stickToBottomRef.current = next === 0;
-                return next;
-            });
-            return;
-        }
-        if (key.upArrow) {
-            setScrollOffset((offset) => {
-                const next = Math.min(maxScrollOffset, offset + 1);
-                stickToBottomRef.current = next === 0;
-                return next;
-            });
-        }
-        if (key.downArrow) {
-            setScrollOffset((offset) => {
-                const next = Math.max(0, offset - 1);
-                stickToBottomRef.current = next === 0;
-                return next;
-            });
-        }
     });
 
     function handleSlashCommand(value: string): boolean {
@@ -107,17 +67,35 @@ function Chat(props: {
         switch (command) {
             case "/clear":
                 props.session.clear();
-                stickToBottomRef.current = true;
+                setSlashCommandOutput(undefined);
                 return true;
             case "/help":
+                setSlashCommandOutput({
+                    title: "/help",
+                    text: SLASH_COMMANDS.map((slashCommand) =>
+                        `${slashCommand.name} - ${slashCommand.description}`,
+                    ).join("\n"),
+                });
                 return true;
             case "/pwd":
+                setSlashCommandOutput({
+                    title: "/pwd",
+                    text: process.cwd(),
+                });
                 return true;
             case "/system":
+                setSlashCommandOutput({
+                    title: "/system",
+                    text: props.agent.getSystemInstructions(),
+                });
                 return true;
             case "/exit":
                 process.exit(0);
             default:
+                setSlashCommandOutput({
+                    title: "Unknown Command",
+                    text: `Unknown command: ${command}`,
+                });
                 return true;
         }
     }
@@ -125,12 +103,14 @@ function Chat(props: {
     async function handleSubmit(value: string) {
         if (!value.trim() || loading) return;
         setInput("");
-        stickToBottomRef.current = true;
         if (value.trim().startsWith("/")) {
-            const selectedCommand = matchingSlashCommands[selectedSlashCommandIndex];
+            const selectedCommand = matchingSlashCommands.length > 0
+                ? matchingSlashCommands[selectedSlashCommandIndex]
+                : undefined;
             if (handleSlashCommand(selectedCommand?.name ?? value)) return;
         }
 
+        setSlashCommandOutput(undefined);
         setLoading(true);
         try {
             await props.agent.sendMessage(value);
@@ -140,17 +120,12 @@ function Chat(props: {
     }
 
     return (
-        <Box flexDirection="column" height={height} paddingX={1}>
-            <Box flexDirection="column" height={transcriptHeight}>
+        <Box flexDirection="column" paddingX={1}>
+            <Box flexDirection="column">
                 {props.messages.length === 0 && !loading ? (
                     <Welcome agent={props.agent} />
                 ) : (
-                    <Transcript
-                        height={transcriptHeight}
-                        rows={rows}
-                        scrollOffset={scrollOffset}
-                        maxScrollOffset={maxScrollOffset}
-                    />
+                    <Transcript rows={rows} />
                 )}
             </Box>
 
@@ -159,6 +134,15 @@ function Chat(props: {
                     commands={matchingSlashCommands}
                     selectedIndex={selectedSlashCommandIndex}
                 />
+            )}
+
+            {slashCommandOutput && matchingSlashCommands.length === 0 && (
+                <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
+                    <Text color={ACCENT} bold>{slashCommandOutput.title}</Text>
+                    {slashCommandOutput.text.split("\n").map((line, index) => (
+                        <Text key={index} color="gray">{line}</Text>
+                    ))}
+                </Box>
             )}
 
             <Box borderStyle="round" borderColor={loading ? "yellow" : ACCENT} paddingX={1}>
@@ -194,6 +178,7 @@ export function startCli() {
     {
         provider,
         compileInstructions: DEFAULT_AGENT_INSTRUCTIONS,
+        logger,
         tools: [
             new ReadFileTool(),
             new EditFileTool(),
@@ -212,9 +197,7 @@ export function startCli() {
     const app = render(renderChat());
     const rerender = () => app.rerender(renderChat());
     session.onCleared(rerender);
-    session.onNewMessage(rerender);
-    session.onMessageReverted(rerender);
-    session.onMessageCommited(rerender);
+    session.onMessageCommitted(rerender);
 }
 
 function formatEnvErrors(issues: { path: PropertyKey[]; message: string }[]): string {
