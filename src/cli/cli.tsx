@@ -8,7 +8,6 @@ import { DEFAULT_AGENT_INSTRUCTIONS } from "../agent/agent-instructions.js";
 import { WriteFileTool } from "../tools/write.js";
 import { ReadFileTool } from "../tools/read.js";
 import { SearchTool } from "../tools/search.js";
-import { EditFileTool } from "../tools/edit.js";
 import { ACCENT, SESSION_SLASH_COMMANDS, SLASH_COMMANDS, type SlashCommand } from "./types.js";
 import { buildBlocks } from "./blocks.js";
 import { Welcome } from "./components/Welcome.js";
@@ -433,7 +432,6 @@ export async function startCli() {
         compileInstructions: DEFAULT_AGENT_INSTRUCTIONS,
         tools: [
             new ReadFileTool(),
-            new EditFileTool(),
             new WriteFileTool(),
             new SearchTool(),
         ],
